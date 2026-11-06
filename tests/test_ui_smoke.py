@@ -130,3 +130,24 @@ def test_main_window_smoke(qtbot, tmp_config):
     window.toggle_theme()
     window.toggle_language()
     window.close()
+
+
+def test_trust_permission_build_dialogs(qtbot, tmp_config):
+    from fcc.claude.permissions import PermissionAsk, rule_options
+    from fcc.ui.dialogs.permission import PermissionDialog
+    from fcc.ui.dialogs.system import BuildDialog
+    from fcc.ui.dialogs.trust import TrustDialog
+
+    trust = TrustDialog("/tmp/some project", tmp_config)
+    set_palette(trust, palette_for("light"))
+    qtbot.addWidget(trust)
+
+    ask = PermissionAsk(id="x1", tool_name="Bash", tool_input={"command": "git push"},
+                        subject="git push", title="Run command", description="push")
+    dialog = PermissionDialog(ask, rule_options(ask, "/tmp/some project"))
+    set_palette(dialog, palette_for("light"))
+    qtbot.addWidget(dialog)
+
+    build = BuildDialog(tmp_config)
+    set_palette(build, palette_for("light"))
+    qtbot.addWidget(build)
