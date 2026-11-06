@@ -149,6 +149,9 @@ class AppConfig:
 
     # demo
     demo_mode: bool = False
+    gateway_mode: str = "auto"      # auto | fcc | off  (FCC = free-claude-code server)
+    gateway_url: str = ""
+    gateway_token: str = ""
 
     # storage
     projects: List[ProjectRecord] = field(default_factory=list)
@@ -331,6 +334,11 @@ def _coerce(data: dict) -> AppConfig:
         config.accent = "coral"
     if config.permission_mode not in PERMISSION_MODES:
         config.permission_mode = "default"
+    if config.gateway_mode not in ("auto", "fcc", "off"):
+        config.gateway_mode = "auto"
+    for project in config.projects:
+        if project.permission_mode and project.permission_mode not in PERMISSION_MODES:
+            project.permission_mode = ""
     config.font_size = max(11, min(22, int(config.font_size or 14)))
     config.projects.sort(key=lambda p: p.last_opened or p.added_at, reverse=True)
     return config

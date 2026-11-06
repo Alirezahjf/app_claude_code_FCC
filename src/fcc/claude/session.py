@@ -194,6 +194,16 @@ class ClaudeBackend(BaseBackend):
         argv = build_command(self.cli_info.path, self.caps, opts)
         env = os.environ.copy()
         config = self._config_getter()
+        from fcc.claude import gateway
+
+        gw = gateway.detect(config)
+        self.gateway = gw if gw.detected else None
+        if gw.detected:
+            gateway.apply_to_env(env, gw)
+            log.info("FCC gateway active: %s", gw.base_url)
+        elif getattr(config, "gateway_mode", "auto") == "fcc":
+            self.backend_notice.emit("warn",
+                                     "FCC gateway forced in settings but no server responded.")
         env.update({k: str(v) for k, v in (config.env or {}).items() if v is not None})
         env["NO_COLOR"] = "1"
         env["CLAUDE_CODE_ENTRYPOINT"] = env.get("CLAUDE_CODE_ENTRYPOINT", "fcc-studio")

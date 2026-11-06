@@ -57,25 +57,43 @@ class ProjectRow(QWidget):
         self.trust_dot.setPixmap(_dot(9, dot_color))
 
 
-class SessionRow(QWidget):
+class SessionRow(QFrame):
+    """A polished session entry: accent bar, title, model chip and recency."""
+
     def __init__(self, record: SessionRecord, active: bool = False, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.record = record
         self._active = active
+        self.setObjectName("SessionItem")
+        self.setProperty("active", "true" if active else "false")
         box = QHBoxLayout(self)
-        box.setContentsMargins(6, 5, 6, 5)
-        box.setSpacing(8)
+        box.setContentsMargins(10, 7, 10, 7)
+        box.setSpacing(9)
+
+        self.bar = QFrame()
+        self.bar.setFixedSize(3, 26)
+        box.addWidget(self.bar, 0, Qt.AlignVCenter)
+
         self.icon_label = QLabel()
-        self.icon_label.setPixmap(icons.pixmap("chat", "#6E6C65", 15))
-        box.addWidget(self.icon_label)
+        self.icon_label.setFixedSize(18, 18)
+        box.addWidget(self.icon_label, 0, Qt.AlignVCenter)
+
         column = QVBoxLayout()
         column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(1)
+        column.setSpacing(2)
+        top = QHBoxLayout()
+        top.setSpacing(6)
         self.name = QLabel(record.title or tr("nav.new_session"))
+        self.name.setTextFormat(Qt.PlainText)
         font = self.name.font()
-        font.setWeight(QFont.DemiBold if active else QFont.Normal)
+        font.setWeight(QFont.DemiBold if active else QFont.Medium)
         self.name.setFont(font)
-        column.addWidget(self.name)
+        top.addWidget(self.name, 1)
+        self.chip = QLabel((record.model or "").split("/")[-1][:18])
+        self.chip.setObjectName("Chip")
+        self.chip.setVisible(bool(record.model))
+        top.addWidget(self.chip, 0, Qt.AlignVCenter)
+        column.addLayout(top)
         self.meta = QLabel(_when(record.updated_at))
         self.meta.setProperty("faint", True)
         font = self.meta.font()
@@ -86,9 +104,16 @@ class SessionRow(QWidget):
 
     def set_palette(self, palette) -> None:
         color = palette.accent if self._active else palette.text_faint
-        self.icon_label.setPixmap(icons.pixmap("chat", color, 15))
+        self.icon_label.setPixmap(icons.pixmap("chat", color, 16))
+        self.bar.setStyleSheet(
+            f"background: {palette.accent if self._active else 'transparent'};"
+            f" border-radius: 2px;")
         self.name.setStyleSheet(f"color: {palette.text};")
         self.meta.setStyleSheet(f"color: {palette.text_faint};")
+        self.chip.setStyleSheet(
+            f"background: {palette.accent_soft if self._active else palette.surface_alt};"
+            f" color: {palette.accent if self._active else palette.text_muted};"
+            f" border-radius: 8px; padding: 1px 7px; font-size: 9px; font-weight: 600;")
 
 
 def _dot(size: int, color: str):
@@ -364,7 +389,7 @@ class Sidebar(QFrame):
                 continue
             shown += 1
             item = QListWidgetItem()
-            item.setSizeHint(QSize(0, 44))
+            item.setSizeHint(QSize(0, 52))
             row = SessionRow(record, active=(record.id == active))
             self.session_list.addItem(item)
             self.session_list.setItemWidget(item, row)

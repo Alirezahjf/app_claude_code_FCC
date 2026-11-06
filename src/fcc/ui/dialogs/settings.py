@@ -22,6 +22,7 @@ from fcc.version import __version__, APP_NAME
 
 class SettingsDialog(QDialog):
     applied = Signal()
+    gatewayChanged = Signal()
     cliPathChanged = Signal(str)
     themeChanged = Signal()
     languageChanged = Signal()
@@ -192,6 +193,30 @@ class SettingsDialog(QDialog):
 
         self.doctor_button = button(tr("cli.run_doctor"), "activity", size=14, clicked=self._doctor)
 
+        # ---- FCC gateway (free-claude-code server) ----
+        self.gateway_mode_combo = QComboBox()
+        for value in ("auto", "fcc", "off"):
+            self.gateway_mode_combo.addItem(tr(f"gateway.mode.{value}"), value)
+        self.gateway_mode_combo.setCurrentIndex(
+            max(0, self.gateway_mode_combo.findData(config.gateway_mode)))
+        self.gateway_url_edit = QLineEdit(config.gateway_url)
+        self.gateway_url_edit.setPlaceholderText("http://127.0.0.1:8082")
+        self.gateway_token_edit = QLineEdit(config.gateway_token)
+        self.gateway_token_edit.setEchoMode(QLineEdit.Password)
+        self.gateway_token_edit.setPlaceholderText("freecc")
+        self.gateway_status = QLabel("")
+        self.gateway_status.setWordWrap(True)
+        self.gateway_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        gateway_buttons = QWidget()
+        gb = QHBoxLayout(gateway_buttons)
+        gb.setContentsMargins(0, 0, 0, 0)
+        gb.setSpacing(8)
+        gb.addWidget(button(tr("gateway.test"), "activity", size=14, clicked=self._test_gateway))
+        gb.addWidget(button(tr("gateway.open_admin"), "external", ghost=True, size=14,
+                            clicked=self._open_gateway_admin))
+        gb.addStretch(1)
+        self._gateway_initial_status()
+
         return self._form([
             (tr("cli.path"), path_row),
             (None, self.cli_status),
@@ -202,7 +227,59 @@ class SettingsDialog(QDialog):
             ("Append system prompt", self.system_prompt_edit),
             ("Startup timeout", self.startup_spin),
             (None, self.doctor_button),
+            (None, label(tr("gateway.title"), bold=True)),
+            (None, label(tr("gateway.hint"), faint=True, wrap=True)),
+            (tr("gateway.mode"), self.gateway_mode_combo),
+            (tr("gateway.url"), self.gateway_url_edit),
+            (tr("gateway.token"), self.gateway_token_edit),
+            (None, self.gateway_status),
+            (None, gateway_buttons),
         ])
+
+    def _gateway_info(self):
+        from fcc.claude import gateway
+
+        probe_config = self.config
+        return gateway.detect(probe_config)
+
+    def _gateway_initial_status(self) -> None:
+        info = self._gateway_info()
+        self._show_gateway_status(info)
+
+    def _show_gateway_status(self, info) -> None:
+        if info.detected:
+            self.gateway_status.setText(
+                tr("gateway.status.on", url=info.base_url) + f" · {info.detail}"
+                + f" · token: {info.token_source}")
+            self.gateway_status.setStyleSheet("color: #4C8C4A;")
+        else:
+            self.gateway_status.setText(tr("gateway.status.off") + f" · {info.detail}")
+            self.gateway_status.setStyleSheet("")
+
+    def _test_gateway(self) -> None:
+        from fcc.claude import gateway
+
+        self.gateway_status.setText(tr("gateway.status.checking"))
+        self.gateway_status.setStyleSheet("")
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.processEvents()
+        info = gateway.detect(self.config, use_cache=False, timeout=2.0)
+        gateway.invalidate_cache()
+        self._show_gateway_status(info)
+
+    def _open_gateway_admin(self) -> None:
+        from fcc.claude import gateway
+        from fcc.ui.common import open_url
+
+        explicit = self.gateway_url_edit.text().strip().rstrip("/")
+        info = gateway.detect(self.config)
+        base = explicit or info.base_url
+        if not base:
+            self._test_gateway()
+            base = explicit or gateway.detect(self.config, use_cache=False).base_url
+        if base:
+            open_url(base.rstrip("/") + "/admin")
 
     def _permissions_tab(self) -> QWidget:
         config = self.config
@@ -511,6 +588,13 @@ class SettingsDialog(QDialog):
         config.startup_timeout_sec = int(self.startup_spin.value())
         config.permission_mode = str(self.mode_combo.currentData() or "default")
         config.permission_timeout_sec = int(self.timeout_spin.value())
+        gateway_changed = (config.gateway_mode, config.gateway_url, config.gateway_token) != (
+            str(self.gateway_mode_combo.currentData() or "auto"),
+            self.gateway_url_edit.text().strip(),
+            self.gateway_token_edit.text().strip())
+        config.gateway_mode = str(self.gateway_mode_combo.currentData() or "auto")
+        config.gateway_url = self.gateway_url_edit.text().strip()
+        config.gateway_token = self.gateway_token_edit.text().strip()
         config.build_onefile = self.onefile_check.isChecked()
         config.build_installer = self.installer_check.isChecked()
         config.build_output = self.output_edit.text().strip()
@@ -523,6 +607,11 @@ class SettingsDialog(QDialog):
             self.themeChanged.emit()
         if language_changed:
             self.languageChanged.emit()
+        if gateway_changed:
+            from fcc.claude import gateway
+
+            gateway.invalidate_cache()
+            self.gatewayChanged.emit()
         if cli_changed:
             self.cliPathChanged.emit(config.cli_path)
         self.accept()

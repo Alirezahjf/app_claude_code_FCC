@@ -127,6 +127,11 @@ class DiagnosticsDialog(QDialog):
         environment = discovery.environment_report(info)
         if self.backend is not None and hasattr(self.backend, "diagnostics"):
             environment["backend"] = str(self.backend.diagnostics())
+        from fcc.claude import gateway as gateway_module
+
+        gw = gateway_module.detect(self.config)
+        environment["fcc_gateway"] = (
+            f"{gw.summary()} · token: {gw.token_source}" if gw.detected else gw.summary())
         self.environment_view.setPlainText(
             f"{APP_NAME} {__version__}\n\n"
             + "\n".join(f"{key:<22} {value}" for key, value in environment.items())

@@ -28,7 +28,7 @@ class TrustDialog(QDialog):
         self.setWindowTitle(tr("project.trust_title"))
         self.setModal(True)
         self.setMinimumWidth(560)
-        self.setMaximumWidth(620)
+        self.setMaximumWidth(720)
         self.setObjectName("Modal")
         self._palette = None
 
@@ -77,7 +77,11 @@ class TrustDialog(QDialog):
         path_box.addWidget(self.path_label, 1)
         box.addWidget(self.path_frame)
 
-        self.body_label = label(tr("project.trust_body").format(path=self.path), wrap=True, muted=True)
+        try:
+            body_text = tr("project.trust_body").format(path=self.path)
+        except (KeyError, IndexError, ValueError):
+            body_text = f"{tr('project.trust_body')} — {self.path}"
+        self.body_label = label(body_text, wrap=True, muted=True)
         box.addWidget(self.body_label)
 
         box.addWidget(hline())
@@ -121,7 +125,8 @@ class TrustDialog(QDialog):
 
     # ------------------------------------------------------------------ #
     def _mode_changed(self) -> None:
-        self.mode = str(self.mode_combo.currentData() or "default")
+        value = str(self.mode_combo.currentData() or "default")
+        self.mode = value if value in PERMISSION_MODES else "default"
         risky = self.mode in ("bypassPermissions", "dontAsk", "acceptEdits")
         self.mode_warning.setVisible(risky)
         if self.mode == "bypassPermissions":

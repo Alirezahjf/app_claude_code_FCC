@@ -68,6 +68,9 @@ class StatusBar(QFrame):
         box.addWidget(_vsep())
         self.mode_label = label("", faint=True)
         box.addWidget(self.mode_label)
+        self.gateway_label = label("", faint=True)
+        self.gateway_label.setVisible(False)
+        box.addWidget(self.gateway_label)
         box.addWidget(_vsep())
         self.stats_label = label("", faint=True)
         box.addWidget(self.stats_label)
@@ -92,6 +95,12 @@ class StatusBar(QFrame):
     def set_mode(self, mode: str) -> None:
         self.mode_label.setText(tr(f"perm.mode.{mode}") if mode else "")
         self.mode_label.setVisible(bool(mode))
+
+    def set_gateway(self, text: str, ok: bool = False) -> None:
+        self.gateway_label.setText(text or "")
+        self.gateway_label.setVisible(bool(text))
+        color = "#4C8C4A" if ok else ""
+        self.gateway_label.setStyleSheet(f"color: {color};" if color else "")
 
     def set_stats(self, stats) -> None:
         from fcc.claude.protocol import format_cost, format_duration, format_tokens
@@ -211,6 +220,7 @@ class ToastStack(QWidget):
         self._toasts.append(toast)
         toast.animate_in()
         self._relayout()
+        QTimer.singleShot(0, self._relayout)   # after label wrapping settles
         while len(self._toasts) > 4:
             self.dismiss(self._toasts[0])
         return toast
@@ -231,10 +241,13 @@ class ToastStack(QWidget):
         parent = self.parentWidget()
         if parent is None:
             return
-        self.adjustSize()
-        height = min(parent.height() - 40, max(60, self.sizeHint().height()))
-        self.setGeometry(parent.width() - self.width() - 22, parent.height() - height - 56,
-                         self.width(), height)
+        self._box.activate()
+        width = 460
+        needed = self._box.sizeHint().height()
+        height = max(60, min(needed, max(60, parent.height() - 96)))
+        x = max(8, parent.width() - width - 22)
+        y = max(8, parent.height() - height - 56)
+        self.setGeometry(x, y, width, height)
         self.raise_()
 
     def set_palette(self, palette) -> None:

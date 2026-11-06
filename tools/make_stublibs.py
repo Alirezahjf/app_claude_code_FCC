@@ -60,15 +60,18 @@ def collect(pyside_dir: Path) -> dict[str, list[list[str]]]:
         output = subprocess.run(["readelf", "--dyn-syms", "-W", str(library)],
                                 capture_output=True, text=True).stdout
         for line in output.splitlines():
-            match = DYN_SYM_LINE.match(line)
-            if not match:
+            parts = line.split()
+            if len(parts) < 8 or not parts[0].rstrip(":").isdigit():
                 continue
-            bind, _type, section, name = match.groups()
+            bind, section = parts[4], parts[6]
+            name = " ".join(parts[7:])
             if bind not in ("GLOBAL", "WEAK"):
                 continue
             version = ""
             if "@" in name:
                 name, version = name.split("@", 1)
+            name = name.split()[0] if name.split() else name
+            version = version.split()[0] if version.split() else version
             if section == "UND":
                 undefined[(name, version)] += 1
             else:

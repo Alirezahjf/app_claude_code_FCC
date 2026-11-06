@@ -39,7 +39,7 @@ log = get_logger("window")
 class CliProbeThread(QThread):
     """Probing the CLI can take a second — never do it on the GUI thread."""
 
-    finishedProbe = Signal(object, object)  # CliInfo, Capabilities
+    finishedProbe = Signal(object, object, object)  # CliInfo, Capabilities, GatewayInfo
 
     def __init__(self, cli_path: str = "", cwd: str = "", parent=None) -> None:
         super().__init__(parent)
@@ -47,9 +47,12 @@ class CliProbeThread(QThread):
         self.cwd = cwd or None
 
     def run(self) -> None:  # noqa: D102
+        from fcc.claude import gateway
+
         info = discovery.probe(self.cli_path, cwd=self.cwd, include_help=True)
         caps = detect(info.path, info.version, info.help_text) if info.found else None
-        self.finishedProbe.emit(info, caps)
+        gw = gateway.detect(None, use_cache=False)
+        self.finishedProbe.emit(info, caps, gw)
 
 
 class MainWindow(QMainWindow):
@@ -64,6 +67,7 @@ class MainWindow(QMainWindow):
         self.font_size = int(self.config.font_size)
         self.cli_info = discovery.CliInfo()
         self.caps = None
+        self.gateway_info = None
         self.backend: Optional[Any] = None
         self.current_project: Optional[ProjectRecord] = None
         self.current_session: Optional[SessionRecord] = None
@@ -274,9 +278,16 @@ class MainWindow(QMainWindow):
             return
         self._activate_project(record, autostart=True, silent=True)
 
-    def _on_probe_done(self, info, caps) -> None:
+    def _on_probe_done(self, info, caps, gw=None) -> None:
         self.cli_info = info
         self.caps = caps
+        self.gateway_info = gw
+        if gw is not None and gw.detected:
+            self.status_bar.set_gateway(f"FCC :{gw.port}", True)
+            self.status_bar.gateway_label.setToolTip(
+                f"{gw.base_url} · token: {gw.token_source} · {gw.detail}")
+        else:
+            self.status_bar.set_gateway("")
         self.welcome.set_cli(info.found, info.version, info.path)
         if info.found:
             self.sidebar.set_status(f"claude {info.version}", "ready")
@@ -332,10 +343,16 @@ class MainWindow(QMainWindow):
         from fcc.ui.dialogs.trust import TrustDialog
 
         record = self.config.upsert_project(path)
-        dialog = TrustDialog(record.path, record.permission_mode or self.config.permission_mode,
-                             record.trusted, self)
-        dialog.set_palette(self.palette)
-        dialog.exec()
+        try:
+            dialog = TrustDialog(record.path,
+                                 record.permission_mode or self.config.permission_mode,
+                                 record.trusted, self)
+            dialog.set_palette(self.palette)
+            dialog.exec()
+        except Exception as exc:  # never let the consent dialog take the app down
+            log.exception("trust dialog failed")
+            self.toast(f"Trust dialog error: {exc}", "error", 8000)
+            return
         if not dialog.granted:
             config_module.save(self.config)
             self.sidebar.refresh_projects(self.config.projects, self.config.last_project)
@@ -909,7 +926,13 @@ class MainWindow(QMainWindow):
         dialog.themeChanged.connect(self.apply_palette)
         dialog.languageChanged.connect(self.retranslate)
         dialog.cliPathChanged.connect(lambda _path: self._startup_probe())
+        dialog.gatewayChanged.connect(self._on_gateway_changed)
         dialog.exec()
+
+    def _on_gateway_changed(self) -> None:
+        self._startup_probe()
+        if self.backend is not None and self.backend.is_running():
+            self.toast(tr("gateway.restart"), "warn", 6000)
 
     def _on_settings_applied(self) -> None:
         set_language(self.config.language or "en")

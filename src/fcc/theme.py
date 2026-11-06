@@ -211,11 +211,11 @@ FONT_MONO = "'Cascadia Mono', 'JetBrains Mono', 'Fira Code', Consolas, 'SF Mono'
 
 def _radius(scale: float = 1.0) -> Dict[str, int]:
     return {
-        "xs": int(4 * scale),
-        "sm": int(7 * scale),
-        "md": int(10 * scale),
-        "lg": int(14 * scale),
-        "xl": int(20 * scale),
+        "xs": int(6 * scale),
+        "sm": int(10 * scale),
+        "md": int(14 * scale),
+        "lg": int(18 * scale),
+        "xl": int(26 * scale),
         "pill": 999,
     }
 
@@ -432,6 +432,12 @@ QMenu {{
     border-radius: {r['md']}px; padding: 6px; color: {p.text};
 }}
 QMenu::item {{ padding: 8px 22px 8px 12px; border-radius: {r['sm']}px; }}
+QFrame#SessionItem {{ background: transparent; border-radius: {r['md']}px; border: 1px solid transparent; }}
+QFrame#SessionItem:hover {{ background: {p.sidebar_item_hover}; }}
+QFrame#SessionItem[active="true"] {{ background: {p.sidebar_item_selected}; border: 1px solid {p.border}; }}
+QFrame#ProjectItem {{ background: transparent; border-radius: {r['md']}px; }}
+QFrame#ProjectItem:hover {{ background: {p.sidebar_item_hover}; }}
+QFrame#ProjectItem[active="true"] {{ background: {p.sidebar_item_selected}; }}
 QMenu::item:selected {{ background-color: {p.accent_soft}; color: {p.accent}; }}
 QMenu::item:disabled {{ color: {p.text_faint}; }}
 QMenu::separator {{ height: 1px; background: {p.border}; margin: 5px 8px; }}

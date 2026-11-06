@@ -151,3 +151,59 @@ def test_trust_permission_build_dialogs(qtbot, tmp_config):
     build = BuildDialog(tmp_config)
     set_palette(build, palette_for("light"))
     qtbot.addWidget(build)
+
+
+def test_toast_stack_keeps_both_toasts_visible(qtbot):
+    from PySide6.QtWidgets import QWidget
+
+    from fcc.ui.widgets.panels import ToastStack
+
+    host = QWidget()
+    host.resize(900, 700)
+    qtbot.addWidget(host)
+    stack = ToastStack(host)
+    stack.show()
+    host.show()
+    first = stack.show_toast("first notification", "success", timeout=0)
+    second = stack.show_toast("second notification", "error", timeout=0)
+    from PySide6.QtWidgets import QApplication
+
+    QApplication.processEvents()
+    stack._relayout()
+    QApplication.processEvents()
+    assert first in stack._toasts and second in stack._toasts
+    geo1, geo2 = first.geometry(), second.geometry()
+    # no overlap and both inside the stack rectangle
+    assert geo1.bottom() < geo2.top() or geo2.bottom() < geo1.top()
+    for geo in (geo1, geo2):
+        assert geo.top() >= 0 and geo.bottom() <= stack.height()
+        assert geo.left() >= 0 and geo.right() <= stack.width()
+    assert stack.height() >= geo1.height() + geo2.height()
+
+
+def test_trust_dialog_cycles_all_modes(qtbot):
+    from fcc.config import PERMISSION_MODES
+    from fcc.ui.dialogs.trust import TrustDialog
+
+    for mode in PERMISSION_MODES:
+        dialog = TrustDialog("/tmp/some project", mode)
+        set_palette(dialog, palette_for("light"))
+        qtbot.addWidget(dialog)
+        assert dialog.mode == mode
+        dialog._mode_changed()
+        dialog._allow()
+        assert dialog.granted is True
+        assert dialog.mode in PERMISSION_MODES
+
+
+def test_session_row_looks_professional(qtbot, tmp_config):
+    from fcc.ui.widgets.sidebar import SessionRow
+
+    record = tmp_config.create_session("/tmp/demo", "Refactor payments")
+    record.model = "claude-opus-5-5"
+    row = SessionRow(record, active=True)
+    set_palette(row, palette_for("dark"))
+    qtbot.addWidget(row)
+    assert row.property("active") == "true"
+    assert row.objectName() == "SessionItem"
+    assert row.chip.text() == "claude-opus-5-5"
