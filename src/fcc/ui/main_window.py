@@ -279,6 +279,8 @@ class MainWindow(QMainWindow):
         self._activate_project(record, autostart=True, silent=True)
 
     def _on_probe_done(self, info, caps, gw=None) -> None:
+        if self._closing:
+            return
         self.cli_info = info
         self.caps = caps
         self.gateway_info = gw
@@ -300,7 +302,12 @@ class MainWindow(QMainWindow):
                 self._show_cli_missing()
 
     def _show_cli_missing(self) -> None:
+        # Never pop a modal dialog while closing / hidden (tests, shutdown):
+        # the C++ box would be deleted under us and take the event loop down.
+        if self._closing or not self.isVisible() or getattr(self, "_cli_box", None):
+            return
         box = QMessageBox(self)
+        self._cli_box = box
         box.setIcon(QMessageBox.Warning)
         box.setWindowTitle(tr("cli.not_found"))
         box.setText(tr("cli.not_found"))
