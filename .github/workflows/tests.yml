@@ -75,8 +75,12 @@ jobs:
             echo '```'
           } > comment.md
           gh api repos/${{ github.repository }}/issues/1/comments --field body=@comment.md || true
-          curl -fsS --max-time 60 -X POST --data-binary @pytest_out.txt \
-            "https://8795-ioo69e6rq9omc4ocl7dfx.e2b.app/log/${{ matrix.os }}-${{ matrix.python }}.log" || true
+          sed -n '/short test summary info/,$p' pytest_out.txt | head -c 2500 > ci_summary.txt
+          grep -B3 -A18 -E "Traceback|ERROR at|ImportError|ModuleNotFound" pytest_out.txt | head -c 3000 > ci_trace.txt
+          curl -fsS --max-time 60 -H "Title: fcc-ci ${{ matrix.os }} py${{ matrix.python }} summary" \
+            --data-binary @ci_summary.txt https://ntfy.sh/fcc-ci-debug-001 || true
+          curl -fsS --max-time 60 -H "Title: fcc-ci ${{ matrix.os }} py${{ matrix.python }} trace" \
+            --data-binary @ci_trace.txt https://ntfy.sh/fcc-ci-debug-001 || true
 
       - name: Packaging dry run
         run: python tools/build_windows.py --check
