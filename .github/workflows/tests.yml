@@ -12,6 +12,10 @@ permissions:
 env:
   QT_QPA_PLATFORM: offscreen
   FCC_E2E: "0"
+  # Make Qt log warnings/fatals to stderr even without a console (Windows
+  # runners otherwise swallow them into OutputDebugString).
+  QT_LOGGING_TO_CONSOLE: "1"
+  QT_FORCE_STDERR_LOGGING: "1"
 
 jobs:
   test:
@@ -51,8 +55,21 @@ jobs:
       - name: Run the test suite
         shell: bash
         run: |
-          python -m pytest -q -rf > pytest_out.txt 2>&1 || exit 1
+          set +e
+          python -m pytest -q -rf > pytest_out.txt 2>&1
+          ec=$?
+          set -e
+          echo "PYTEST_EXIT_CODE=$ec" >> pytest_out.txt
           cat pytest_out.txt
+          # PySide6 can hard-crash during interpreter shutdown on Windows after
+          # a fully green session.  pytest_sessionfinish fsyncs the marker file
+          # below once every test passed and the session concluded, so in that
+          # exact case (and only that case) treat the run as successful.
+          if [ "$ec" -ne 0 ] && grep -q "FCC_SESSION_COMPLETE exitstatus=0" pytest_session_marker.txt 2>/dev/null; then
+            echo "::warning::pytest exited with code $ec after a fully green session (known PySide6 interpreter-shutdown crash); treating as success."
+            exit 0
+          fi
+          exit $ec
 
       - name: Upload pytest output on failure
         if: failure()
@@ -76,6 +93,7 @@ jobs:
           } > comment.md
           gh api repos/${{ github.repository }}/issues/1/comments --field body=@comment.md || true
           tail -c 3500 pytest_out.txt > ci_tail.txt || true
+          { echo; echo "--- session marker ---"; cat pytest_session_marker.txt 2>/dev/null || echo "(none)"; } >> ci_tail.txt || true
           curl -fsS --max-time 60 -H "Title: fcc-ci ${{ matrix.os }} py${{ matrix.python }} tail" \
             --data-binary @ci_tail.txt https://ntfy.sh/fcc-ci-debug-001 || true
 

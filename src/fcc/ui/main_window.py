@@ -35,6 +35,26 @@ from fcc.version import APP_NAME, __version__
 
 log = get_logger("window")
 
+# Probe threads that are running (or finished but not yet collected).  A QThread
+# whose Python wrapper is garbage-collected while its C++ thread still runs makes
+# Qt call qFatal/abort — a silent hard crash on Windows.  Holding every probe
+# here until it has finished makes that impossible.
+_LIVE_PROBES = set()
+
+
+def drain_probes(timeout_ms: int = 8000) -> None:
+    """Wait for in-flight CLI probe threads so nothing is destroyed while running."""
+    deadline = time.monotonic() + timeout_ms / 1000.0
+    for thread in list(_LIVE_PROBES):
+        try:
+            if thread.isRunning():
+                thread.requestInterruption()
+                remaining = max(50, int((deadline - time.monotonic()) * 1000))
+                thread.wait(remaining)
+        except RuntimeError:  # C++ object already gone
+            pass
+        _LIVE_PROBES.discard(thread)
+
 
 class CliProbeThread(QThread):
     """Probing the CLI can take a second — never do it on the GUI thread."""
@@ -50,7 +70,11 @@ class CliProbeThread(QThread):
         from fcc.claude import gateway
 
         info = discovery.probe(self.cli_path, cwd=self.cwd, include_help=True)
+        if self.isInterruptionRequested():
+            return
         caps = detect(info.path, info.version, info.help_text) if info.found else None
+        if self.isInterruptionRequested():
+            return
         gw = gateway.detect(None, use_cache=False)
         self.finishedProbe.emit(info, caps, gw)
 
@@ -262,14 +286,24 @@ class MainWindow(QMainWindow):
         return self.current_project.path if self.current_project else ""
 
     def _startup_probe(self) -> None:
+        # The probe is started from a deferred singleShot; if the window was
+        # closed in the meantime (or is a test fixture being torn down) starting
+        # a thread nobody will ever join risks a hard crash at shutdown.
+        if self._closing:
+            return
         self.sidebar.set_status(tr("cli.searching"), "idle")
         self.status_bar.set_state("idle")
-        self._probe = CliProbeThread(self.config.cli_path, self.config.last_project)
-        self._probe.finishedProbe.connect(self._on_probe_done)
-        self._probe.start()
+        thread = CliProbeThread(self.config.cli_path, self.config.last_project)
+        thread.finishedProbe.connect(self._on_probe_done)
+        thread.finished.connect(lambda: _LIVE_PROBES.discard(thread))
+        self._probe = thread
+        _LIVE_PROBES.add(thread)
+        thread.start()
 
     def _maybe_autostart(self) -> None:
         """Reopen the last trusted project when the user enabled auto-start."""
+        if self._closing:
+            return
         if not self.config.autostart_session or self.current_project is not None:
             return
         path = self.config.last_project or ""
@@ -999,7 +1033,12 @@ class MainWindow(QMainWindow):
             self.backend.shutdown()
         probe = getattr(self, "_probe", None)
         if probe is not None and probe.isRunning():
-            probe.wait(2000)
+            probe.requestInterruption()
+            # Generous wait: gateway probes are bounded by their HTTP timeouts.
+            # If it still does not finish, _LIVE_PROBES keeps the wrapper alive
+            # (drain_probes() joins it at app/test teardown) so the C++ thread
+            # is never destroyed while running.
+            probe.wait(5000)
         super().closeEvent(event)
 
 

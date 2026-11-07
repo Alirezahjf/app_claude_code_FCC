@@ -123,6 +123,11 @@ def test_main_window_smoke(qtbot, tmp_config):
 
     window = MainWindow(tmp_config)
     qtbot.addWidget(window)
+    # Let the deferred startup probe fire and run to completion inside the
+    # test, so no thread can leak past teardown (a hard-crash risk on Windows).
+    qtbot.wait(200)
+    if window._probe is not None:
+        assert window._probe.wait(20000)
     window.toggle_theme()
     assert tmp_config.theme in ("light", "dark")
     window.toggle_language()

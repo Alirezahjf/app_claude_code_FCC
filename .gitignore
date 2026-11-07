@@ -37,3 +37,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# CI/test artifacts
+pytest_session_marker.txt
+pytest_out.txt
+ci_tail.txt
+comment.md

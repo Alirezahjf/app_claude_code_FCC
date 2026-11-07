@@ -219,5 +219,16 @@ def run(argv: Optional[List[str]] = None) -> int:
         QTimer.singleShot(600, window.new_session)
 
     code = app.exec()
+
+    # Join any probe thread still in flight before the interpreter starts
+    # tearing objects down — a QThread destroyed while running aborts the
+    # whole process (silently on Windows).
+    try:
+        from fcc.ui.main_window import drain_probes
+
+        drain_probes(8000)
+    except Exception:  # pragma: no cover - shutdown best-effort
+        pass
+
     log.info("application exited with code %s", code)
     return int(code)
