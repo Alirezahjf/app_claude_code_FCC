@@ -151,6 +151,12 @@ python tools/make_stublibs.py
 LD_LIBRARY_PATH=~/.cache/fcc-stublibs python -m pytest
 ```
 
+CI itself (`.github/workflows/tests.yml`, matrix ubuntu/windows × py3.10/3.12) writes
+pytest output to `pytest_out.txt`, appends the real `PYTEST_EXIT_CODE=`, forces Qt
+logging to stderr, and uploads both as an artifact on failure. The full story of the
+two shutdown crashes this caught — and a step-by-step guide for debugging any future
+red check — lives in [`docs/ci-debug-history.md`](docs/ci-debug-history.md) (فارسی).
+
 ---
 
 ## Packaging: `.exe` + installer
@@ -195,6 +201,7 @@ assets/             generated icons (ico/png) + macOS iconset on demand
 build/              fcc.spec (PyInstaller), version_info.txt, installer/ClaudeCodeStudio.iss
 tools/              build_windows.py, make_icons.py, make_stublibs.py
 tests/              unit, widget (offscreen Qt) and real-CLI end-to-end suites
+docs/               intro site (index.html) + CI debug history (ci-debug-history.md, فارسی)
 .github/workflows/  tests.yml, windows-build.yml
 run.py, fcc.bat     launchers
 ```
@@ -212,6 +219,10 @@ run.py, fcc.bat     launchers
 - **Everything looks fine but nothing streams** — older CLIs may lack
   `--include-partial-messages`; the app detects the rejection and relaunches without it
   (aggregated messages still render).
+- **A GitHub Actions check is red** — open the run under the repo's *Actions* tab,
+  read the *Run the test suite* step (full pytest output + real exit code) and
+  download the `pytest-<os>-<python>` artifact. تاریخچه و راهنمای کامل فارسی:
+  [`docs/ci-debug-history.md`](docs/ci-debug-history.md).
 
 ## License
 
