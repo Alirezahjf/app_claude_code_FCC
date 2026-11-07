@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 env:
   QT_QPA_PLATFORM: offscreen
@@ -76,26 +75,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pytest-${{ matrix.os }}-${{ matrix.python }}
-          path: pytest_out.txt
+          path: |
+            pytest_out.txt
+            pytest_session_marker.txt
           if-no-files-found: ignore
-
-      - name: Post failure details to PR #1
-        if: failure() && matrix.python == '3.12'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          {
-            echo "CI failure report — ${{ matrix.os }} / Python ${{ matrix.python }} / run ${{ github.run_id }}"
-            echo '```'
-            tail -n 70 pytest_out.txt
-            echo '```'
-          } > comment.md
-          gh api repos/${{ github.repository }}/issues/1/comments --field body=@comment.md || true
-          tail -c 3500 pytest_out.txt > ci_tail.txt || true
-          { echo; echo "--- session marker ---"; cat pytest_session_marker.txt 2>/dev/null || echo "(none)"; } >> ci_tail.txt || true
-          curl -fsS --max-time 60 -H "Title: fcc-ci ${{ matrix.os }} py${{ matrix.python }} tail" \
-            --data-binary @ci_tail.txt https://ntfy.sh/fcc-ci-debug-001 || true
 
       - name: Packaging dry run
         run: python tools/build_windows.py --check
